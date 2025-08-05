@@ -41,4 +41,199 @@ public class ServiPark extends HttpServlet {
 		
 		return json.toString();
 	}
+
+
+		private String toJson(List<Vehicle> vehicles) {
+        	if (vehicles == null) {
+            	return "[]";
+        	}
+        
+        	StringBuilder json = new StringBuilder();
+        	json.append("[");
+        
+        	for (int i = 0; i < vehicles.size(); i++) {
+            	json.append(toJson(vehicles.get(i)));
+            	if (i < vehicles.size() - 1) {
+                	json.append(",");
+            	}
+        	}
+        
+        	json.append("]");
+        	return json.toString();
+		}
+
+
+		private String readRequestBody(HttpServletRequest request) throws IOException {
+        StringBuilder buffer = new StringBuilder();
+        String line;
+        try (java.io.BufferedReader reader = request.getReader()) {
+            while ((line = reader.readLine()) != null) {
+                buffer.append(line);
+            }
+        }
+        return buffer.toString();
+    }
+
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		String pathInfo = request.getPathInfo();
+		response.setContentType("application/json");
+		response.setCharacterEncoding("UTF-8");
+
+		PrintWriter out = response.getWriter();
+		
+		// get all vehicles
+		if (pathInfo == null || pathInfo.equals("/")) {
+			List<Vehicle> vehicles = vehicleDAO.getAllVehicles();
+			out.print(toJson(vehicles));
+		
+		// get vehicle by plate
+		} else {
+			String plate = pathInfo.substring(1);
+			Vehicle vehicle = vehicleDAO.getVehicle(plate);
+
+			if (vehicle == null) {
+				out.print(toJson(vehicle));
+			} else{
+				response.setStatus(404); // Not Found
+				out.print("{\"error\":\"Vehicle not found\"}");
+			}
+		}
+	}
+
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		response.setContentType("application/json");
+		response.setCharacterEncoding("UTF-8");
+
+		PrintWriter out = response.getWriter();
+		
+		try{
+			System.out.println("===== BEGIN DEBUG POST =====");
+
+			// Read the request body
+			String jsonData = readRequestBody(request);
+			System.out.println("Json data received: " + jsonData);
+
+			// Check if json is empty
+			if (jsonData == null || jsonData.trim().isEmpty()) {
+				response.setStatus(400);
+				out.print("{\"success\": false, \"message\": \"JSON data empty\"}");
+				return;
+			}
+
+			// Create vehicle and extract data manually
+			Vehicle vehicle = new Vehicle();
+
+			// Manual parse JSON
+			String plate = extractStringField(jsonData, "plate");
+			String model = extractStringField(jsonData, "model");
+			int year = extractIntField(jsonData, "year");
+			String ownerName = extractStringField(jsonData, "ownerName");
+
+			vehicle.setPlate(plate);
+			vehicle.setModel(model);
+			vehicle.setYear(year);
+			vehicle.setOwnerName(ownerName);
+
+			// Data validation
+			if (vehicle.getPlate() == null || vehicle.getPlate().trim().isEmpty()) {
+				response.setStatus(400);
+				out.print("{\"success\": false, \"message\": \"Plate is required\"}");
+				return;
+
+			}
+
+			if (vehicle.getModel() == null || vehicle.getModel().trim().isEmpty()) {
+				response.setStatus(400);
+				out.print("{\"success\": false, \"message\": \"Model is required\"}");
+				return;
+				
+			}
+
+			if (vehicle.getYear() <= 0) {
+				response.setStatus(400);
+				out.print("{\"success\": false, \"message\": \"Year must be a valid number\"}");
+				return;
+				
+			}
+
+			if (vehicle.getOwnerName() == null || vehicle.getOwnerName().trim().isEmpty()) {
+				response.setStatus(400);
+				out.print("{\"success\": false, \"message\": \"Owner name is required\"}");
+				return;
+				
+			}
+
+			System.out.println("Vehicle validated successfully: " + vehicle.getPlate() + ", " + vehicle.getModel());
+
+			// create and add new vehicle
+			boolean success = vehicleDAO.addVehicle(vehicle);
+			if (success) {
+				response.setStatus(201); // Created
+				out.print("{\"success\": true, \"message\": \"Vehicle added successfully\", \"vehicle\": " + toJson(vehicle) + "}");
+			} else {
+				response.setStatus(500); // Internal Server Error
+				out.print("{\"success\": false, \"message\": \"Failed to add vehicle\"}");
+		}
+
+			System.out.println("===== END DEBUG POST =====");
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			response.setStatus(500); // Internal Server Error
+			out.print("{\"success\": false, \"message\": \"An error occurred: " + e.getMessage() + "\"}");
+		} 
+		
+	}
+
+	private String extractStringField(String jsonData, String field) {
+		String completeField = "\"" + field + "\":\"";
+		int beginIndex = jsonData.indexOf(completeField);
+		if (beginIndex < 0) return null;
+
+		beginIndex = jsonData.indexOf(":", beginIndex) + 1;
+		// skip leading spaces
+		while (beginIndex < jsonData.length() && jsonData.charAt(beginIndex) == ' ' || jsonData.charAt(beginIndex) == '\t') {
+			beginIndex++;
+		}
+
+		if(jsonData.charAt(beginIndex) == '"'){
+			beginIndex++;
+			int endIndex = jsonData.indexOf("\"", beginIndex);
+			if (endIndex > beginIndex) {
+				return jsonData.substring(beginIndex, endIndex);
+			}
+		}
+
+		return null;
+	}
+
+	private int extractIntField(String jsonData, String field) {
+		String completeField = "\"" + field + "\":";
+		int beginIndex = jsonData.indexOf(completeField);
+		if (beginIndex < 0) return 0;
+
+		beginIndex = jsonData.indexOf(":", beginIndex) + 1;
+		// skip leading spaces
+		while (beginIndex < jsonData.length() && (jsonData.charAt(beginIndex) == ' ' || jsonData.charAt(beginIndex) == '\t')) {
+			beginIndex++;
+		}
+
+
+		//find the end of the number
+		int endIndex = beginIndex;
+		while (endIndex < jsonData.length() && (Character.isDigit(jsonData.charAt(endIndex)) || jsonData.charAt(endIndex) == '.')) {
+			endIndex++;
+		}
+
+		if (endIndex > beginIndex) {
+			try {
+				return Integer.parseInt(jsonData.substring(beginIndex, endIndex));
+			} catch (NumberFormatException e) {
+				System.out.println("Error while converting to int: " + jsonData.substring(beginIndex, endIndex));
+			}
+		}
+
+		return 0;
+	}
+
 }
