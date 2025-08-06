@@ -9,8 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.parkinglot.dao.VehicleDAO;
 import com.parkinglot.model.Vehicle;
